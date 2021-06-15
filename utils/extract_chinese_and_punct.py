@@ -16,7 +16,7 @@ from transformers import BertTokenizer
 
 
 max_seq_length = 500
-tokenizer = BertTokenizer.from_pretrained('transformer_cpt/bert', do_lower_case=True)
+tokenizer = BertTokenizer.from_pretrained('hfl/chinese-roberta-wwm-ext-large', do_lower_case=True)
 
 LHan = [
     [0x2E80, 0x2E99],  # Han # So  [26] CJK RADICAL REPEAT, CJK RADICAL RAP

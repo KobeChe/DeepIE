@@ -1,4 +1,6 @@
 # _*_ coding:utf-8 _*_
+import sys
+sys.path.append('/home/chezhonghao/projects/competition/BaiduInformationExtraction/DeepIE')
 import argparse
 import logging
 import os
@@ -22,11 +24,14 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 
 def get_args():
     parser = argparse.ArgumentParser()
-
+    arg_input='/home/chezhonghao/projects/competition/BaiduInformationExtraction/DeepIE/data/BaiduIE_2020/DuIE_2_0';
+    arg_output='/home/chezhonghao/projects/competition/BaiduInformationExtraction/DeepIE/frozenmodel/relation_extraction_model_ckpt'
+    arg_bert_model='hfl/chinese-roberta-wwm-ext-large'
+    arg_max_len=128
     # file parameters
-    parser.add_argument("--input", default=None, type=str, required=True)
+    parser.add_argument("--input", default=arg_input, type=str, required=False)
     parser.add_argument("--output"
-                        , default=None, type=str, required=False,
+                        , default=arg_output, type=str, required=False,
                         help="The output directory where the model checkpoints and predictions will be written.")
 
     # choice parameters
@@ -49,14 +54,14 @@ def get_args():
     parser.add_argument("--warmup_proportion", default=0.1, type=float,
                         help="Proportion of training to perform linear learning rate warmup for. E.g., 0.1 = 10%% "
                              "of training.")
-    parser.add_argument("--bert_model", default=None, type=str,
+    parser.add_argument("--bert_model", default=arg_bert_model, type=str,
                         help="Bert pre-trained model selected in the list: bert-base-uncased, "
                              "bert-large-uncased, bert-base-cased, bert-large-cased, bert-base-multilingual-uncased, "
                              "bert-base-multilingual-cased, bert-base-chinese.")
     # parser.add_argument("--tokenizer_path", default='bert-base-chinese', type=str)
 
     # model parameters
-    parser.add_argument("--max_len", default=1000, type=int)
+    parser.add_argument("--max_len", default=arg_max_len, type=int)
     parser.add_argument('--entity_emb_size', type=int, default=300)
     parser.add_argument('--pos_limit', type=int, default=30)
     parser.add_argument('--pos_dim', type=int, default=300)
@@ -73,8 +78,8 @@ def get_args():
 
 
 def bulid_dataset(args, spo_config, reader,tokenizer, debug=False):
-    train_src = args.input + "/train_data.json"
-    dev_src = args.input + "/test2_data.json"
+    train_src = args.input + "/train.json"
+    dev_src = args.input + "/dev.json"
 
     train_examples_file = args.cache_data + "/train-examples.pkl"
     dev_examples_file = args.cache_data + "/dev-examples.pkl"

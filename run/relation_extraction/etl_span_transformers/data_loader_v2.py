@@ -61,6 +61,12 @@ class InputFeature(object):
 
 
 def covert_to_tokens(text, tokenizer, max_seq_length, return_orig_index=False):
+    '''
+    此函数的主要目的是为了：
+    比如说 有一句话 2011年10月20日，America胜利了 将其分为['2011','年','10','月','20','日',',','America','胜','利','了']
+    return: tok_to_orig_start_index: list 每个token在原始text中的start的索引
+          ：tok_to_orig_end_index：list 每个token在原始text中的end的索引
+    '''
     sub_text = []
     buff = ""
     flag_en = False
@@ -174,7 +180,17 @@ class Reader(object):
         return self._read(filename, data_type)
 
     def _read(self, filename, data_type):
-
+        '''
+        构建训练数据集
+        complex relation
+        当面对complex的sample 比如 下面这组关系
+        [{subject:'张智尧','predicate':'饰演','object':{'@value':'楚留香','inWork':'楚留香传奇'}},
+        {subject:'楚留香传奇'，‘predicate’:'主演'，'object':{'@value':'张智尧'}}]
+        我们需要需要把它改写成:
+        {('楚留香传奇'):(‘张智尧‘，’主演‘),(楚留香):('楚留香传奇','饰演_inwork'),
+        ('张智尧'):('楚留香'，‘饰演_@value’)}
+        插入example
+        '''
         examples = []
         with open(filename, 'r') as fr:
             p_id = 0
@@ -204,10 +220,8 @@ class Reader(object):
                             spoes=None
                         ))
                 else:
-
                     spoes = {}
                     for spo in src_data['spo_list']:
-
                         spo_dict = dict()
                         for spo_object in spo['object'].keys():
                             if spo['predicate'] in self.spo_conf:
@@ -228,7 +242,7 @@ class Reader(object):
                                                                      self.max_seq_length)
                                 sub_ent_list.append(spo['subject'])
                             else:
-                                # complex relation
+                                #complex sample
                                 complex_relation_label = [6, 8, 24, 30, 44]
                                 complex_relation_affi_label = [7, 9, 25, 26, 27, 31, 45]
                                 predicate_label = self.spo_conf[spo['predicate'] + '_' + spo_object]

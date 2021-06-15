@@ -2,16 +2,14 @@
 import argparse
 import logging
 import os
-
+import sys
+sys.path.append('/home/chezhonghao/projects/competition/BaiduInformationExtraction/DeepIE')
 from config.spo_config_v1 import BAIDU_RELATION
 from run.relation_extraction.etl_span.data_loader import Reader, Vocabulary, Feature
 from run.relation_extraction.etl_span.train import Trainer
-
 from utils.file_util import save, load
-
 logger = logging.getLogger()
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-
 
 def get_args():
     parser = argparse.ArgumentParser()

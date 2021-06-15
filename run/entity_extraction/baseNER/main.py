@@ -1,9 +1,12 @@
 # _*_ coding:utf-8 _*_
+import sys
+import os
+curPath = os.path.abspath(os.path.dirname(__file__))
+rootPath = os.path.split(curPath)[0]
+sys.path.append('/home/chezhonghao/projects/competition/BaiduInformationExtraction/DeepIE')
 import argparse
 import logging
-import os
 import pickle
-
 from run.entity_extraction.baseNER.data_loader import Reader, Vocabulary, Feature, StaticEmbedding
 from run.entity_extraction.baseNER.train import Trainer
 from utils.file_util import load
