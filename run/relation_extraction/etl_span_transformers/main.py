@@ -4,6 +4,8 @@ sys.path.append('/home/chezhonghao/projects/competition/BaiduInformationExtracti
 import argparse
 import logging
 import os
+os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0,3"
 import random
 from warnings import simplefilter
 
@@ -45,6 +47,7 @@ def get_args():
                         help="Total number of training epochs to perform.")
     parser.add_argument('--patience_stop', type=int, default=10, help='Patience for learning early stop')
     parser.add_argument('--device_id', type=int, default=0)
+    parser.add_argument('--data_process_device_id',type=list,default=[0,1])
     parser.add_argument('--seed', type=int, default=42, help="random seed for initialization")
 
     # bert parameters
@@ -98,10 +101,8 @@ def bulid_dataset(args, spo_config, reader,tokenizer, debug=False):
         logging.info('dev examples size is {}'.format(len(dev_examples)))
 
     convert_examples_features = Feature(max_len=args.max_len, spo_config=spo_config, tokenizer=tokenizer)
-
     train_examples = train_examples[:2] if debug else train_examples
     dev_examples = dev_examples[:2] if debug else dev_examples
-
     train_data_set = convert_examples_features(train_examples, data_type='train')
     dev_data_set = convert_examples_features(dev_examples, data_type='dev')
     train_data_loader = train_data_set.get_dataloader(args.train_batch_size, shuffle=True, pin_memory=args.pin_memory)
@@ -131,7 +132,7 @@ def main():
     spo_conf = spo_config_v1.BAIDU_RELATION if args.baidu_spo_version == 'v1' else spo_config_v2.BAIDU_RELATION
     tokenizer = BertTokenizer.from_pretrained(args.bert_model, do_lower_case=True)
     reader = Reader(spo_conf,tokenizer, max_seq_length=args.max_len)
-    eval_examples, data_loaders, tokenizer = bulid_dataset(args, spo_conf, reader,tokenizer, debug=False)
+    eval_examples, data_loaders, tokenizer = bulid_dataset(args, spo_conf, reader,tokenizer, debug=True)
     trainer = Trainer(args, data_loaders, eval_examples, spo_conf=spo_conf, tokenizer=tokenizer)
 
     if args.train_mode == "train":

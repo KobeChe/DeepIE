@@ -40,7 +40,7 @@ class Trainer(object):
             self.resume(args)
         logging.info('total gpu num is {}'.format(self.n_gpu))
         if self.n_gpu > 1:
-            self.model = nn.DataParallel(self.model.cuda(), device_ids=[0, 1])
+            self.model = nn.DataParallel(self.model.cuda(), device_ids=args.data_process_device_id)
 
         train_dataloader, dev_dataloader = data_loaders
         train_eval, dev_eval = examples
@@ -56,7 +56,6 @@ class Trainer(object):
         self.optimizer = self.set_optimizer(args, self.model,
                                             train_steps=(int(
                                                 len(train_eval) / args.train_batch_size) + 1) * args.epoch_num)
-
     def set_optimizer(self, args, model, train_steps=None):
         param_optimizer = list(model.named_parameters())
         param_optimizer = [n for n in param_optimizer if 'pooler' not in n[0]]
@@ -74,20 +73,15 @@ class Trainer(object):
         return optimizer
 
     def train(self, args):
-
         best_f1 = 0.0
         patience_stop = 0
         self.model.train()
         step_gap = 20
         for epoch in range(int(args.epoch_num)):
-
             global_loss = 0.0
-
             for step, batch in tqdm(enumerate(self.data_loader_choice[u"train"]), mininterval=5,
                                     desc=u'training at epoch : %d ' % epoch, leave=False, file=sys.stdout):
-
                 loss = self.forward(batch)
-
                 if step % step_gap == 0:
                     global_loss += loss
                     current_loss = global_loss / step_gap
@@ -95,7 +89,6 @@ class Trainer(object):
                         u"step {} / {} of epoch {}, train/loss: {}".format(step, len(self.data_loader_choice["train"]),
                                                                            epoch, current_loss))
                     global_loss = 0.0
-
                 # if step % 500 == 0 and epoch >= 6:
                 #     res_dev = self.eval_data_set("dev")
                 #     if res_dev['f1'] >= best_f1:

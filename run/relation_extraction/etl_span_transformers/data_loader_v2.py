@@ -348,7 +348,7 @@ class SPODataset(Dataset):
                         for s in spoes:
                             subject_labels[s[0], 0] = 1
                             subject_labels[s[1], 1] = 1
-                        # 随机选一个subject
+                        # 随机选一个subject  
                         subject_ids = random.choice(list(spoes.keys()))
                         # 对应的object标签
                         object_labels = np.zeros((len(token_ids), len(self.spo_config), 2), dtype=np.float32)

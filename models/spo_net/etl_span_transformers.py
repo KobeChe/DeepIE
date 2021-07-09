@@ -56,8 +56,11 @@ class ERENet(BertPreTrainedModel):
             sub_start_encoder = batch_gather(bert_encoder, subject_ids[:, 0])
             sub_end_encoder = batch_gather(bert_encoder, subject_ids[:, 1])
             subject = torch.cat([sub_start_encoder, sub_end_encoder], 1)
+            #bert_encoder:[batch_size,len(token_ids),embedding_size]
+            #context_encoder :[batch_size,len(token_ids),embedding_size]
             context_encoder = self.LayerNorm(bert_encoder, subject)
-
+            #sub_preds:[batch_size,len(token_ids),2] 但是事实上你要把它变成
+            #[batch_size,len(token_ids),len(subject_type),2] 其中2这个纬度表示subject 的起始位置这
             sub_preds = self.subject_dense(bert_encoder)
             po_preds = self.po_dense(context_encoder).reshape(passage_ids.size(0), -1, self.classes_num, 2)
 
