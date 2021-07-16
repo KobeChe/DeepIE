@@ -5,12 +5,12 @@ import logging
 import sys
 import time
 from warnings import simplefilter
-
+import os
 import numpy as np
 import torch
 import torch.nn as nn
 from tqdm import tqdm
-
+from numpy import unravel_index
 import models.spo_net.etl_span_transformers as etl
 from config.spo_config_v2 import SPO_TAG
 from layers.encoders.transformers.bert.bert_optimization import BertAdam
@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 class Trainer(object):
 
-    def __init__(self, args, data_loaders, examples, spo_conf, tokenizer):
+    def __init__(self, args, data_loaders, examples, spo_conf, subject_class_conf,tokenizer):
 
         self.args = args
         self.tokenizer = tokenizer
@@ -30,27 +30,33 @@ class Trainer(object):
 
         self.id2rel = {item: key for key, item in spo_conf.items()}
         self.rel2id = spo_conf
+        self.id2suject_label={item :key for key,item in subject_class_conf.items()}
+        self.subject_label2id=subject_class_conf
 
         if self.n_gpu > 0:
             torch.cuda.manual_seed_all(args.seed)
-        self.model = etl.ERENet.from_pretrained(args.bert_model, classes_num=len(spo_conf))
+        self.model = etl.ERENet.from_pretrained(args.bert_model, classes_num=len(spo_conf),subject_class_num=len(subject_class_conf))
 
         self.model.to(self.device)
         if args.train_mode == "predict":
+            self.resume(args)
+        if args.train_mode == "train" and os.path.exists(args.output+'/pytorch_model.bin'):
             self.resume(args)
         logging.info('total gpu num is {}'.format(self.n_gpu))
         if self.n_gpu > 1:
             self.model = nn.DataParallel(self.model.cuda(), device_ids=args.data_process_device_id)
 
-        train_dataloader, dev_dataloader = data_loaders
-        train_eval, dev_eval = examples
+        train_dataloader, dev_dataloader ,test_dataloader= data_loaders
+        train_eval, dev_eval,test_eval = examples
         self.eval_file_choice = {
             "train": train_eval,
             "dev": dev_eval,
+            "test":test_eval
         }
         self.data_loader_choice = {
             "train": train_dataloader,
             "dev": dev_dataloader,
+            "test":test_dataloader
         }
         # todo 稍后要改成新的优化器，并加入梯度截断
         self.optimizer = self.set_optimizer(args, self.model,
@@ -89,21 +95,6 @@ class Trainer(object):
                         u"step {} / {} of epoch {}, train/loss: {}".format(step, len(self.data_loader_choice["train"]),
                                                                            epoch, current_loss))
                     global_loss = 0.0
-                # if step % 500 == 0 and epoch >= 6:
-                #     res_dev = self.eval_data_set("dev")
-                #     if res_dev['f1'] >= best_f1:
-                #         best_f1 = res_dev['f1']
-                #         logging.info("** ** * Saving fine-tuned model ** ** * ")
-                #         model_to_save = self.model.module if hasattr(self.model,
-                #                                                      'module') else self.model  # Only save the model it-self
-                #         output_model_file = args.output + "/pytorch_model.bin"
-                #         torch.save(model_to_save.state_dict(), str(output_model_file))
-                #         patience_stop = 0
-                #     else:
-                #         patience_stop += 1
-                #     if patience_stop >= args.patience_stop:
-                #         return
-
             res_dev = self.eval_data_set("dev")
             if res_dev['f1'] >= best_f1:
                 best_f1 = res_dev['f1']
@@ -188,7 +179,7 @@ class Trainer(object):
 
         self.convert2ressult(eval_file, answer_dict)
 
-        with codecs.open('result_6.json', 'w', 'utf-8') as f:
+        with codecs.open('data/BaiduIE_2020/DuIE_2_0/bert_cache_data_2_128/result/result.json', 'w', 'utf-8') as f:
             for key, ans_list in answer_dict.items():
                 out_put = {}
                 out_put['text'] = eval_file[int(key)].raw_text
@@ -287,7 +278,7 @@ class Trainer(object):
 
                     def check_object(spoes):
 
-                        for (o1_, o2_) in spoes.keys():
+                        for (o1_, o2_,o_type) in spoes.keys():
                             obj_ent_ = context[
                                        tok_to_orig_start_index[o1_ - 1]:tok_to_orig_end_index[o2_ - 1] + 1].replace(
                                 '\xa0',
@@ -298,15 +289,15 @@ class Trainer(object):
 
                     if p in [6, 8, 30, 44]:
                         candidate_dict = dict()
-                        if (o1, o2) not in spoes:
+                        if (o1, o2,p) not in spoes:
                             o1, o2 = check_object(spoes)
 
-                        if (o1, o2) in spoes:
-                            for o1_, o2_, p_ in spoes[(o1, o2)]:
+                        if (o1, o2,p) in spoes:
+                            for o1_, o2_, p_ in spoes[(o1, o2,p)]:
                                 if p + 1 == p_:
-                                    candidate_dict[p_] = (o1_, o2_)
+                                    candidate_dict[p_] = (o1_, o2_,p_)
 
-                        for p_, (o1_, o2_) in candidate_dict.items():
+                        for p_, (o1_, o2_,p_type) in candidate_dict.items():
                             obj_ent = context[
                                       tok_to_orig_start_index[o1_ - 1]:tok_to_orig_end_index[o2_ - 1] + 1].replace(
                                 '\xa0',
@@ -317,15 +308,15 @@ class Trainer(object):
                     elif p == 24:
                         candidate_dict = dict()
 
-                        if (o1, o2) not in spoes:
+                        if (o1, o2,p) not in spoes:
                             o1, o2 = check_object(spoes)
 
-                        if (o1, o2) in spoes:
-                            for o1_, o2_, p_ in spoes[(o1, o2)]:
+                        if (o1, o2,p) in spoes:
+                            for o1_, o2_, p_ in spoes[(o1, o2,p)]:
                                 if p_ in [25, 26, 27]:
-                                    candidate_dict[p_] = (o1_, o2_)
+                                    candidate_dict[p_] = (o1_, o2_,p_)
 
-                        for p_, (o1_, o2_) in candidate_dict.items():
+                        for p_, (o1_, o2_,p_type) in candidate_dict.items():
 
                             if p_ in [25, 26, 27]:
                                 obj_ent = context[
@@ -346,12 +337,12 @@ class Trainer(object):
             answer_dict[qid][1].extend(po_predict)
 
     def convert_spo_contour(self, qids, subject_preds, po_preds, eval_file, answer_dict):
-
+        '''
+         根据po_preds 构造
+        '''
         for qid, subject, po_pred in zip(qids.data.cpu().numpy(), subject_preds.data.cpu().numpy(),
                                          po_preds.data.cpu().numpy()):
-
             subject = tuple(subject.tolist())
-
             if qid == -1:
                 continue
             spoes = answer_dict[qid][2]
@@ -361,9 +352,13 @@ class Trainer(object):
             context = eval_file[qid.item()].context
             tok_to_orig_start_index = eval_file[qid.item()].tok_to_orig_start_index
             tok_to_orig_end_index = eval_file[qid.item()].tok_to_orig_end_index
-            start = np.where(po_pred[:, :, 0] > 0.6)
+            start = np.where(po_pred[:, :, 0] > 0.5)
             end = np.where(po_pred[:, :, 1] > 0.5)
-
+            # if len(start[0])==0 and np.max(po_pred[:, :, 0])>0.2 and np.max(po_pred[:, :, 1])>0.2:
+            #     # start = unravel_index(np.argmax(po_pred[:, :, 0]),po_pred[:,:,0].shape)
+            #     # end = unravel_index(np.argmax(po_pred[:, :, 1]),po_pred[:,:,1].shape)
+            #     start=np.where(po_pred[:,:,0]>0.1)
+            #     end=np.where(po_pred[:,:,1]>0.1)
             for _start, predicate1 in zip(*start):
                 if _start > len(tokens) - 2 or _start == 0:
                     continue
@@ -371,15 +366,6 @@ class Trainer(object):
                     if _start <= _end <= len(tokens) - 2 and predicate1 == predicate2:
                         spoes[subject].append((_start, _end, predicate1))
                         break
-
-            # po_predict = []
-            # for s, p, o in spoes:
-            #     po_predict.append(
-            #         (context[tok_to_orig_start_index[s[0] - 1]:tok_to_orig_end_index[s[1] - 1] + 1],
-            #          self.id2rel[p],
-            #          context[tok_to_orig_start_index[o[0] - 1]:tok_to_orig_end_index[o[1] - 1] + 1])
-            #     )
-
             if qid not in answer_dict:
                 raise ValueError('error in answer_dict ')
             else:

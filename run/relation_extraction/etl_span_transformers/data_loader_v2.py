@@ -170,15 +170,15 @@ def search_spo_index(tokens, subject_sub_tokens, object_sub_tokens):
 
 
 class Reader(object):
-    def __init__(self, spo_conf, tokenizer=None, max_seq_length=None):
+    def __init__(self, spo_conf,subject_type_conf, tokenizer=None, max_seq_length=None):
         self.spo_conf = spo_conf
+        self.subject_type_conf=subject_type_conf
         self.tokenizer = tokenizer
         self.max_seq_length = max_seq_length
 
     def read_examples(self, filename, data_type):
         logging.info("Generating {} examples...".format(data_type))
         return self._read(filename, data_type)
-
     def _read(self, filename, data_type):
         '''
         构建训练数据集
@@ -190,6 +190,7 @@ class Reader(object):
         {('楚留香传奇'):(‘张智尧‘，’主演‘),(楚留香):('楚留香传奇','饰演_inwork'),
         ('张智尧'):('楚留香'，‘饰演_@value’)}
         插入example
+        修改
         '''
         examples = []
         with open(filename, 'r') as fr:
@@ -266,12 +267,11 @@ class Reader(object):
                                 object_start = search(object_sub_tokens, tokens)
 
                             if subject_start != -1 and object_start != -1:
-                                s = (subject_start, subject_start + len(subject_sub_tokens) - 1)
+                                s = (subject_start, subject_start + len(subject_sub_tokens) - 1,self.subject_type_conf[spo['subject_type']])
                                 o = (object_start, object_start + len(object_sub_tokens) - 1, predicate_label)
                                 if s not in spoes:
                                     spoes[s] = []
                                 spoes[s].append(o)
-
                     examples.append(
                         Example(
                             p_id=p_id,
@@ -286,17 +286,16 @@ class Reader(object):
 
                         ))
         # print('total gold num is {}'.format(gold_num))
-
         logging.info("{} total size is  {} ".format(data_type, len(examples)))
-
         return examples
 
 
 class Feature(object):
-    def __init__(self, max_len, spo_config, tokenizer):
+    def __init__(self, max_len, spo_config,subject_class_conf, tokenizer):
         self.max_len = max_len
         self.spo_config = spo_config
         self.tokenizer = tokenizer
+        self.subject_class_conf=subject_class_conf
 
     def __call__(self, examples, data_type):
         return self.convert_examples_to_bert_features(examples, data_type)
@@ -310,13 +309,14 @@ class Feature(object):
 
         logging.info("Built instances is Completed")
         return SPODataset(examples2features, spo_config=self.spo_config, data_type=data_type,
-                          tokenizer=self.tokenizer, max_len=self.max_len)
+                          tokenizer=self.tokenizer, max_len=self.max_len,subject_class_conf=self.subject_class_conf)
 
 
 class SPODataset(Dataset):
-    def __init__(self, data, spo_config, data_type, tokenizer=None, max_len=128):
+    def __init__(self, data, spo_config,subject_class_conf,data_type, tokenizer=None, max_len=128):
         super(SPODataset, self).__init__()
         self.spo_config = spo_config
+        self.subject_class_conf=subject_class_conf
         self.tokenizer = tokenizer
         self.max_len = max_len
         self.q_ids = [f[0] for f in data]
@@ -339,15 +339,14 @@ class SPODataset(Dataset):
                 spoes = example.spoes
                 token_ids = self.tokenizer.encode(example.bert_tokens)[1:-1]
                 segment_ids = len(token_ids) * [0]
-
                 if self.is_train:
                     if spoes:
                         # subject标签
                         token_type_ids = np.zeros(len(token_ids), dtype=np.long)
-                        subject_labels = np.zeros((len(token_ids), 2), dtype=np.float32)
+                        subject_labels = np.zeros((len(token_ids),len(self.subject_class_conf) ,2), dtype=np.float32)
                         for s in spoes:
-                            subject_labels[s[0], 0] = 1
-                            subject_labels[s[1], 1] = 1
+                            subject_labels[s[0],s[2],0] = 1
+                            subject_labels[s[1],s[2],1] = 1
                         # 随机选一个subject  
                         subject_ids = random.choice(list(spoes.keys()))
                         # 对应的object标签
@@ -373,7 +372,7 @@ class SPODataset(Dataset):
             else:
                 batch_token_type_ids = sequence_padding(batch_token_type_ids, is_float=False)
                 batch_subject_ids = torch.tensor(batch_subject_ids)
-                batch_subject_labels = sequence_padding(batch_subject_labels, padding=np.zeros(2), is_float=True)
+                batch_subject_labels = sequence_padding(batch_subject_labels, padding=np.zeros((len(self.subject_class_conf),2)), is_float=True)
                 batch_object_labels = sequence_padding(batch_object_labels, padding=np.zeros((len(self.spo_config), 2)),
                                                        is_float=True)
                 return batch_token_ids, batch_segment_ids, batch_token_type_ids, batch_subject_ids, batch_subject_labels, batch_object_labels

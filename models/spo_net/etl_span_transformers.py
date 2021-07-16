@@ -26,22 +26,22 @@ class ERENet(BertPreTrainedModel):
     ERENet : entity relation jointed extraction
     """
 
-    def __init__(self, config, classes_num):
-        super(ERENet, self).__init__(config, classes_num)
+    def __init__(self, config, classes_num,subject_class_num):
+        super(ERENet, self).__init__(config, classes_num,subject_class_num)
 
         print('spo_transformers')
         self.classes_num = classes_num
-
+        self.subject_class_num=subject_class_num
         # BERT model
 
         self.bert = BertModel(config)
-        self.token_entity_emb = nn.Embedding(num_embeddings=2, embedding_dim=config.hidden_size,
-                                             padding_idx=0)
+        # self.subject_type_embedding = nn.Embedding(num_embeddings=subject_class_num, embedding_dim=config.hidden_size,
+        #                                      padding_idx=0)
         self.LayerNorm = ConditionalLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         # pointer net work
         self.po_dense = nn.Linear(config.hidden_size, self.classes_num * 2)
-        self.subject_dense = nn.Linear(config.hidden_size, 2)
+        self.subject_dense = nn.Linear(config.hidden_size, self.subject_class_num*2)
         self.loss_fct = nn.BCEWithLogitsLoss(reduction='none')
 
         self.init_weights()
@@ -53,6 +53,7 @@ class ERENet(BertPreTrainedModel):
         mask = (passage_ids != 0).float()
         bert_encoder = self.bert(passage_ids, token_type_ids=segment_ids, attention_mask=mask)[0]
         if not is_eval:
+            a=subject_ids[:, 1]
             sub_start_encoder = batch_gather(bert_encoder, subject_ids[:, 0])
             sub_end_encoder = batch_gather(bert_encoder, subject_ids[:, 1])
             subject = torch.cat([sub_start_encoder, sub_end_encoder], 1)
@@ -61,11 +62,12 @@ class ERENet(BertPreTrainedModel):
             context_encoder = self.LayerNorm(bert_encoder, subject)
             #sub_preds:[batch_size,len(token_ids),2] 但是事实上你要把它变成
             #[batch_size,len(token_ids),len(subject_type),2] 其中2这个纬度表示subject 的起始位置这
-            sub_preds = self.subject_dense(bert_encoder)
-            po_preds = self.po_dense(context_encoder).reshape(passage_ids.size(0), -1, self.classes_num, 2)
+            sub_preds = self.subject_dense(bert_encoder).reshape(passage_ids.size(0),-1,self.subject_class_num,2)
 
+            po_preds = self.po_dense(context_encoder).reshape(passage_ids.size(0), -1, self.classes_num, 2)
+            # a=torch.where(subject_labels[0][:,:,0]>0.5)
             subject_loss = self.loss_fct(sub_preds, subject_labels)
-            subject_loss = subject_loss.mean(2)
+            subject_loss = torch.sum(subject_loss.mean(3),2)
             subject_loss = torch.sum(subject_loss * mask.float()) / torch.sum(mask.float())
 
             po_loss = self.loss_fct(po_preds, object_labels)
@@ -77,28 +79,35 @@ class ERENet(BertPreTrainedModel):
             return loss
 
         else:
-
-            subject_preds = nn.Sigmoid()(self.subject_dense(bert_encoder))
+            subject_preds = nn.Sigmoid()(self.subject_dense(bert_encoder).reshape(passage_ids.size(0),-1,self.subject_class_num,2))
             answer_list = list()
             for qid, sub_pred in zip(q_ids.cpu().numpy(),
                                      subject_preds.cpu().numpy()):
                 context = eval_file[qid].bert_tokens
-                start = np.where(sub_pred[:, 0] > 0.5)[0]
-                end = np.where(sub_pred[:, 1] > 0.5)[0]
+                subject_label_start = np.where(sub_pred[:,:,0] > 0.5)
+                subject_label_end = np.where(sub_pred[:,:, 1] > 0.5)
+                start,start_label=subject_label_start[0],subject_label_start[1]
+                end,end_label=subject_label_end[0],subject_label_end[1]
                 subjects = []
-                for i in start:
-                    j = end[end >= i]
-                    if i == 0 or i > len(context) - 2:
+                for i in range(len(start)):
+                    #j存的是在end中的index,指的是
+                    j = np.where(end>=start[i])[0]
+                    # j = end[end >= i]
+                    if start[i] == 0 or start[i] > len(context) - 2:
                         continue
-
+                    k=0
+                    #这种策略事实上是值得商榷的
                     if len(j) > 0:
-                        j = j[0]
-                        if j > len(context) - 2:
-                            continue
-                        subjects.append((i, j))
-
+                        while k<len(j):
+                            if end[j[k]] > len(context) - 2:
+                                break
+                            end_index=j[k]
+                            if end_label[end_index]==start_label[i]:
+                                subjects.append((start[i],end[j[k]],start_label[i]))
+                                break
+                            else:
+                                k+=1
                 answer_list.append(subjects)
-
             qid_ids, bert_encoders, pass_ids, subject_ids, token_type_ids = [], [], [], [], []
             for i, subjects in enumerate(answer_list):
                 if subjects:
@@ -108,7 +117,7 @@ class ERENet(BertPreTrainedModel):
                                                                                  bert_encoder.size(2))
 
                     token_type_id = torch.zeros((len(subjects), passage_ids.size(1)), dtype=torch.long)
-                    for index, (start, end) in enumerate(subjects):
+                    for index, (start,end,subject_type) in enumerate(subjects):
                         token_type_id[index, start:end + 1] = 1
 
                     qid_ids.append(qid)
