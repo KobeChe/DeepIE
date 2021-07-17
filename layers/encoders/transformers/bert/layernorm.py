@@ -27,7 +27,7 @@ class BertLayerNorm(nn.Module):
 
 
 class ConditionalLayerNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-12):
+    def __init__(self,input_size,hidden_size, eps=1e-12):
         """Construct a layernorm module in the TF style (epsilon inside the square root).
         """
         super(ConditionalLayerNorm, self).__init__()
@@ -36,8 +36,8 @@ class ConditionalLayerNorm(nn.Module):
         self.bias = nn.Parameter(torch.zeros(hidden_size))
         self.variance_epsilon = eps
 
-        self.beta_dense = Linear(hidden_size * 2, hidden_size, bias=False)
-        self.gamma_dense = Linear(hidden_size * 2, hidden_size, bias=False)
+        self.beta_dense = Linear(input_size, hidden_size, bias=False)
+        self.gamma_dense = Linear(input_size, hidden_size, bias=False)
 
     def forward(self, x, cond):
         cond = cond.unsqueeze(1)

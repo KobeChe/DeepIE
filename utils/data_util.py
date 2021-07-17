@@ -448,6 +448,7 @@ def batch_gather(data: torch.Tensor, index: torch.Tensor):
     return torch.from_numpy(np.array(result)).to(data.device)
 
 
+
 def select_padding(seqs, select, is_float=False, class_num=None):
     lengths = [len(s) for s in seqs]
     batch_length = max(lengths)

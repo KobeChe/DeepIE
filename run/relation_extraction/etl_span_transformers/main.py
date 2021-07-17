@@ -29,7 +29,7 @@ def get_args():
     arg_input='/home/chezhonghao/projects/competition/BaiduInformationExtraction/DeepIE/data/BaiduIE_2020/DuIE_2_0';
     arg_output='/home/chezhonghao/projects/competition/BaiduInformationExtraction/DeepIE/frozenmodel/relation_extraction_model_ckpt'
     arg_bert_model='hfl/chinese-roberta-wwm-ext-large'
-    arg_max_len=128
+    arg_max_len=200
     # file parameters
     parser.add_argument("--input", default=arg_input, type=str, required=False)
     parser.add_argument("--output"
@@ -41,7 +41,7 @@ def get_args():
 
     # train parameters
     parser.add_argument('--train_mode', type=str, default="train")
-    parser.add_argument("--train_batch_size", default=64, type=int, help="Total batch size for training.")
+    parser.add_argument("--train_batch_size", default=27, type=int, help="Total batch size for training.")
     parser.add_argument("--learning_rate", default=5e-5, type=float, help="The initial learning rate for Adam.")
     parser.add_argument("--epoch_num", default=40, type=int,
                         help="Total number of training epochs to perform.")
@@ -140,7 +140,7 @@ def main():
     subject_class_conf = None if args.baidu_spo_version =='v1' else spo_config_v2.subject_type
     tokenizer = BertTokenizer.from_pretrained(args.bert_model, do_lower_case=True)
     reader = Reader(spo_conf,subject_class_conf,tokenizer, max_seq_length=args.max_len)
-    eval_examples, data_loaders, tokenizer = bulid_dataset(args, spo_conf, subject_class_conf,reader,tokenizer, debug=True)
+    eval_examples, data_loaders, tokenizer = bulid_dataset(args, spo_conf, subject_class_conf,reader,tokenizer, debug=False)
     trainer = Trainer(args, data_loaders, eval_examples, spo_conf=spo_conf, tokenizer=tokenizer,subject_class_conf=subject_class_conf)
 
     if args.train_mode == "train":

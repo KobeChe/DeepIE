@@ -33,12 +33,9 @@ class ERENet(BertPreTrainedModel):
         self.classes_num = classes_num
         self.subject_class_num=subject_class_num
         # BERT model
-
         self.bert = BertModel(config)
-        # self.subject_type_embedding = nn.Embedding(num_embeddings=subject_class_num, embedding_dim=config.hidden_size,
-        #                                      padding_idx=0)
-        self.LayerNorm = ConditionalLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-
+        self.subject_type_embedding = nn.Embedding(num_embeddings=subject_class_num, embedding_dim=256,padding_idx=0)
+        self.LayerNorm = ConditionalLayerNorm(config.hidden_size*2+256,config.hidden_size, eps=config.layer_norm_eps)
         # pointer net work
         self.po_dense = nn.Linear(config.hidden_size, self.classes_num * 2)
         self.subject_dense = nn.Linear(config.hidden_size, self.subject_class_num*2)
@@ -56,7 +53,9 @@ class ERENet(BertPreTrainedModel):
             a=subject_ids[:, 1]
             sub_start_encoder = batch_gather(bert_encoder, subject_ids[:, 0])
             sub_end_encoder = batch_gather(bert_encoder, subject_ids[:, 1])
-            subject = torch.cat([sub_start_encoder, sub_end_encoder], 1)
+            subject_item = torch.cat([sub_start_encoder, sub_end_encoder], 1)
+            subject_type_em=self.subject_type_embedding(subject_ids[:,2])
+            subject = torch.cat([subject_item,subject_type_em],1)
             #bert_encoder:[batch_size,len(token_ids),embedding_size]
             #context_encoder :[batch_size,len(token_ids),embedding_size]
             context_encoder = self.LayerNorm(bert_encoder, subject)
@@ -156,7 +155,10 @@ class ERENet(BertPreTrainedModel):
                     subject_encoder = subject_encoder.expand(2, subject_encoder.size(1))
                 sub_start_encoder = batch_gather(bert_encoders, subject_encoder[:, 0])
                 sub_end_encoder = batch_gather(bert_encoders, subject_encoder[:, 1])
-                subject = torch.cat([sub_start_encoder, sub_end_encoder], 1)
+                subject_item = torch.cat([sub_start_encoder, sub_end_encoder], 1)
+
+                subject_type_em=self.subject_type_embedding(subject_encoder[:, 2])
+                subject = torch.cat([subject_item,subject_type_em],1)
                 context_encoder = self.LayerNorm(bert_encoders, subject)
 
                 po_pred = self.po_dense(context_encoder).reshape(subject_encoder.size(0), -1, self.classes_num, 2)
